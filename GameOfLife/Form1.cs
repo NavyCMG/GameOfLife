@@ -1,22 +1,30 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 using System.IO;
+using System.Windows.Forms;
 
 namespace GameOfLife
 {
     public partial class Form1 : Form
     {
+        #region Variables
         public static int seed;
         Random rngS = new Random(seed);
-        Random rng = new Random();
+        Random rng = new Random(); // needed to create a seed if none exists
+        // The universe array
+        bool[,] universe = new bool[60, 30];
+        // The scratchpad array
+        bool[,] scratchpad = new bool[60, 30];
+        // Drawing colors
+        Color gridColor = Color.Black;
+        Color cellColor = Color.Red;
+        // The Timer class
+        Timer timer = new Timer(); 
+        // Generation count
+        int generations = 0;
+        #endregion
 
+        #region Methods
         public void SeedWorld()
         {
             if (seed == 0) //checks for seed and adds one if none exists
@@ -31,8 +39,135 @@ namespace GameOfLife
                 }
             }
         }
-        
-        private int CountingNeighborsT(int x, int y)
+        public void NewWorld()
+        {
+            for (int i = 0; i < universe.GetLength(0); i++)
+            {
+                for (int j = 0; j < universe.GetLength(1); j++)
+                {
+                    universe[i, j] = false;
+                }
+            }
+            generations = -1; //sets generations to 0 when the empty generation is displayed
+            seed = 0; // resets seed to default
+            NextGeneration();
+        }
+        public void SaveAs()
+        {
+            SaveFileDialog dlg = new SaveFileDialog();
+            dlg.Filter = "All Files|*.*|Cells|*.cells";
+            dlg.FilterIndex = 2; dlg.DefaultExt = "cells";
+
+            if (DialogResult.OK == dlg.ShowDialog())
+            {
+                StreamWriter writer = new StreamWriter(dlg.FileName);
+
+                // Write any comments you want to include first.
+                // Prefix all comment strings with an exclamation point.
+                // Use WriteLine to write the strings to the file. 
+                // It appends a CRLF for you.
+                writer.WriteLine("!This is my comment.");
+
+                // Iterate through the universe one row at a time.
+                for (int y = 0; y < universe.GetLength(1); y++)
+                {
+                    // Create a string to represent the current row.
+                    String currentRow = string.Empty;
+
+                    // Iterate through the current row one cell at a time.
+                    for (int x = 0; x < universe.GetLength(0); x++)
+                    {
+                        if (universe[x, y] == false) //check if cell is dead
+                        {
+                            currentRow = currentRow + '0';
+                        }
+                        else { currentRow = currentRow + '1'; }
+                    }
+                    // Once the current row has been read through and the 
+                    // string constructed then write it to the file using WriteLine.
+                    writer.WriteLine(currentRow);
+                    currentRow = string.Empty;
+                }
+                // After all rows and columns have been written then close the file.
+                writer.Close();
+            }
+        }
+        public void Open()
+        {
+            int rowNum;
+            OpenFileDialog dlg = new OpenFileDialog();
+            dlg.Filter = "All Files|*.*|Cells|*.cells";
+            dlg.FilterIndex = 2;
+
+            if (DialogResult.OK == dlg.ShowDialog())
+            {
+                StreamReader reader = new StreamReader(dlg.FileName);
+
+                // Create a couple variables to calculate the width and height
+                // of the data in the file.
+                int maxWidth = 0;
+                int maxHeight = 0;
+
+                // Iterate through the file once to get its size.
+                while (!reader.EndOfStream)
+                {
+                    // Read one row at a time.
+                    string row = reader.ReadLine();
+
+                    // If the row begins with '!' then it is a comment
+                    // and should be ignored.
+                    if (row[0] == '!') continue;
+
+                    // If the row is not a comment then it is a row of cells.
+                    // Increment the maxHeight variable for each row read.
+                    else 
+                    {
+                        // Get the length of the current row string
+                        // and adjust the maxWidth variable if necessary.
+                        maxHeight++;
+                        maxWidth = row.Length;
+                    }
+                }
+                // Resize the current universe and scratchPad
+                // to the width and height of the file calculated above.
+                universe = new bool[maxWidth, maxHeight];
+                scratchpad = new bool[maxWidth, maxHeight];
+
+                // Reset the file pointer back to the beginning of the file.
+                reader.BaseStream.Seek(0, SeekOrigin.Begin);
+                rowNum = 0;
+                // Iterate through the file again, this time reading in the cells.
+                while (!reader.EndOfStream)
+                {
+                    // Read one row at a time.
+                    string row = reader.ReadLine();
+
+                    // If the row begins with '!' then
+                    // it is a comment and should be ignored.
+                    if (row[0] == '!') continue ;
+                    // If the row is not a comment then 
+                    // it is a row of cells and needs to be iterated through.
+                    else
+                    {
+                        for (int xPos = 0; xPos < row.Length; xPos++)
+                        {
+                            // If row[xPos] is a '1'
+                            // set the corresponding cell in the universe to alive.
+                            if (row[xPos] == '1') universe[xPos, rowNum] = true;
+                            // If row[xPos] is a '0'
+                            // set the corresponding cell in the universe to dead.
+                            else universe[xPos, rowNum] = false;
+                        }
+                    }
+                    rowNum++;
+                }
+                // Close the file.
+                reader.Close();
+                graphicsPanel1.Invalidate();
+            }
+        }
+
+        private int CountingNeighborsT(int x, int y) //torodial border option
         {
             int count = 0;
             int xLength = universe.GetLength(0);
@@ -56,26 +191,12 @@ namespace GameOfLife
                     if (yCheck >= yLength)
                     { yCheck = 0; }
                     if (universe[xCheck, yCheck] == true)
-                        { count++; }
+                    { count++; }
                 }
             }
             return count;
         }
 
-        // The universe array
-        bool[,] universe = new bool[60, 30];
-        // The scratchpad array
-        bool[,] scratchpad = new bool[60, 30];
-
-        // Drawing colors
-        Color gridColor = Color.Black;
-        Color cellColor = Color.Red;
-
-        // The Timer class
-        Timer timer = new Timer();
-
-        // Generation count
-        int generations = 0;
 
         public Form1()
         {
@@ -95,14 +216,14 @@ namespace GameOfLife
                 for (int j = 0; j < universe.GetLength(1); j++)
                 {
                     int neighbors = CountingNeighborsT(i, j);
-                    if (universe[i,j] == true && (neighbors < 2))
-                    { scratchpad[i,j] = false; }
-                    else if (universe[i,j] == true && (neighbors > 3))
-                    { scratchpad[i,j] = false; }
-                    else if (universe[i,j] == true && (neighbors == 3 || neighbors == 2))
-                    { scratchpad[i,j] = true; }
-                    else if (universe[i,j] == false && (neighbors == 3))
-                    { scratchpad[i,j] = true; }
+                    if (universe[i, j] == true && (neighbors < 2))
+                    { scratchpad[i, j] = false; }
+                    else if (universe[i, j] == true && (neighbors > 3))
+                    { scratchpad[i, j] = false; }
+                    else if (universe[i, j] == true && (neighbors == 3 || neighbors == 2))
+                    { scratchpad[i, j] = true; }
+                    else if (universe[i, j] == false && (neighbors == 3))
+                    { scratchpad[i, j] = true; }
                 }
             }
             bool[,] temp = universe;
@@ -112,7 +233,7 @@ namespace GameOfLife
             {
                 for (int j = 0; j < scratchpad.GetLength(1); j++)
                 {
-                    scratchpad[i,j] = false;
+                    scratchpad[i, j] = false;
                 }
             }
 
@@ -211,6 +332,8 @@ namespace GameOfLife
             }
         }
 
+        #endregion
+        #region Buttons
         private void PlayButton_Click(object sender, EventArgs e)
         {
             timer.Enabled = true;
@@ -224,7 +347,7 @@ namespace GameOfLife
         private void NextGenButton_Click(object sender, EventArgs e)
         {
             if (timer.Enabled == false)
-            NextGeneration();
+                NextGeneration();
         }
 
         private void RandomButton_Click(object sender, EventArgs e)
@@ -235,16 +358,18 @@ namespace GameOfLife
 
         private void newToolStripButton_Click(object sender, EventArgs e)
         {
-            for (int i = 0; i < universe.GetLength(0); i++)
-            {
-                for (int j = 0; j < universe.GetLength(1); j++)
-                {
-                    universe[i, j] = false;
-                }
-            }
-            generations = -1; //sets generations to 0 when the empty generation is displayed
-            seed = 0; // resets seed to default
-            NextGeneration();
+            NewWorld();
+        }
+
+        private void saveToolStripButton_Click(object sender, EventArgs e)
+        {
+            SaveAs();
+        }
+
+        private void openToolStripButton_Click(object sender, EventArgs e)
+        {
+            Open();
         }
     }
-}
+} 
+#endregion
