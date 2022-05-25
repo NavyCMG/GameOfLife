@@ -8,16 +8,24 @@ namespace GameOfLife
     public partial class Form1 : Form
     {
         #region Variables
-        public static int seed;
+        public static bool universeType = Properties.Settings.Default.UniverseType; //true = torodial false = finite
+        public static bool showGrid = Properties.Settings.Default.ShowGrid;
+        public static bool showNeighborCount = Properties.Settings.Default.ShowNeighborCount;
+        public static bool showHUD = Properties.Settings.Default.ShowHUD;
+        public static int seed; //seed for the universe
+        public static int genTimer = Properties.Settings.Default.GenTimer; //generation timer in mil seconds
+        public static int worldWidth = Properties.Settings.Default.WorldWidth; 
+        public static int worldHeight = Properties.Settings.Default.WorldHeight;
         Random rngS = new Random(seed);
         Random rng = new Random(); // needed to create a seed if none exists
         // The universe array
-        bool[,] universe = new bool[60, 30];
+        bool[,] universe = new bool[worldWidth,worldHeight ];
         // The scratchpad array
-        bool[,] scratchpad = new bool[60, 30];
+        bool[,] scratchpad = new bool[worldWidth, worldHeight];
         // Drawing colors
-        Color gridColor = Color.Black;
-        Color cellColor = Color.Red;
+        Color gridColor = Properties.Settings.Default.GridColor;
+        Color cellColor = Properties.Settings.Default.CellColor;
+        Color backColor = Properties.Settings.Default.BackgroundColor;
         // The Timer class
         Timer timer = new Timer(); 
         // Generation count
@@ -25,6 +33,18 @@ namespace GameOfLife
         #endregion
 
         #region Methods
+        public int NumAlive()
+        {
+            int count = 0;
+            for (int i = 0; i < universe.GetLength(0); i++)
+            {
+                for (int j = 0; j < universe.GetLength(1); j++)
+                {
+                    if (universe[i, j] == true) count++;
+                }
+            }
+            return count;
+        }
         public void SeedWorld()
         {
             if (seed == 0) //checks for seed and adds one if none exists
@@ -167,6 +187,14 @@ namespace GameOfLife
             }
         }
 
+        int CountingNeighbors(int x, int y, bool universType)
+        {
+            if (universType == true)
+            {
+                return CountingNeighborsT(x,y);
+            }
+            else { return CountNeighborsFinite(x, y); }
+        }
         private int CountingNeighborsT(int x, int y) //torodial border option
         {
             int count = 0;
@@ -196,14 +224,39 @@ namespace GameOfLife
             }
             return count;
         }
-
+        private int CountNeighborsFinite(int x, int y)
+        {
+            int count = 0;
+            int xLen = universe.GetLength(0);
+            int yLen = universe.GetLength(1);
+            for (int yOffset = -1; yOffset <= 1; yOffset++)
+            {
+                for (int xOffset = -1; xOffset <= 1; xOffset++)
+                {
+                    int xCheck = x + xOffset;
+                    int yCheck = y + yOffset;
+                    if (xOffset == 0 && yOffset == 0)
+                    { continue;}
+                    if (xCheck < 0)
+                    { continue;}
+                    if (yCheck < 0)
+                    { continue;}
+                    if (xCheck >= xLen)
+                    { continue;}
+                    if (yCheck >= yLen)
+                    { continue;}
+                    if (universe[xCheck, yCheck] == true) count++;
+                }
+            }
+            return count;
+        }
 
         public Form1()
         {
             InitializeComponent();
 
             // Setup the timer
-            timer.Interval = 100; // milliseconds
+            timer.Interval = genTimer; // milliseconds
             timer.Tick += Timer_Tick;
             timer.Enabled = false; // start timer running
         }
@@ -215,7 +268,7 @@ namespace GameOfLife
             {
                 for (int j = 0; j < universe.GetLength(1); j++)
                 {
-                    int neighbors = CountingNeighborsT(i, j);
+                    int neighbors = CountingNeighbors(i, j, universeType);
                     if (universe[i, j] == true && (neighbors < 2))
                     { scratchpad[i, j] = false; }
                     else if (universe[i, j] == true && (neighbors > 3))
@@ -240,9 +293,13 @@ namespace GameOfLife
             // Increment generation count
             generations++;
 
-            // Update status strip generations
+            // Update all status strips
             toolStripStatusLabelGenerations.Text = "Generations = " + generations.ToString();
             toolStripSeedLabel.Text = "Seed = " + seed.ToString();
+            toolStripLivingCells.Text = "Living Cells =" + NumAlive();
+            if( universeType == true)
+            { toolStripStatusLabelUniverseType.Text = "UniverseType = Toroidal"; }
+            else { toolStripStatusLabelUniverseType.Text = "UniverseType = Finite"; }
             graphicsPanel1.Invalidate();
 
         }
@@ -267,8 +324,12 @@ namespace GameOfLife
                 cellLength = cellWidth;
             }
             else { cellLength = cellHeight; }
+            //setting the background color
+            graphicsPanel1.BackColor = backColor;
             // A Pen for drawing the grid lines (color, width)
             Pen gridPen = new Pen(gridColor, 1);
+            if (showGrid == false)
+            { gridPen.Color = Color.Transparent; }
 
             // A Brush for filling living cells interiors (color)
             Brush cellBrush = new SolidBrush(cellColor);
@@ -294,7 +355,37 @@ namespace GameOfLife
 
                     // Outline the cell with a pen
                     e.Graphics.DrawRectangle(gridPen, cellRect.X, cellRect.Y, cellRect.Width, cellRect.Height);
+                    Font font = new Font("Arial", 8f);
+
+                    if (CountingNeighbors(x, y, universeType) > 0 && (showNeighborCount == true))
+                    {
+                        StringFormat stringFormat = new StringFormat();
+                        stringFormat.Alignment = StringAlignment.Center;
+                        stringFormat.LineAlignment = StringAlignment.Center;
+
+                        int neighbors = CountingNeighbors(x, y, universeType);
+
+                        e.Graphics.DrawString(neighbors.ToString(), font, Brushes.Black, cellRect, stringFormat);
+                    }
                 }
+            }
+            //HUD
+            string bordertype;
+            if(universeType == true)
+            {
+                bordertype = "Torodial";
+            }
+            else { bordertype = "Finite"; }
+
+            Font HUDFont = new Font("Arial", 15);
+
+            Rectangle hud = Rectangle.Empty;
+            hud.Y = graphicsPanel1.ClientSize.Height - 130;
+
+            if (showHUD == true)
+            {
+                e.Graphics.DrawString($"Generation = {generations}\nCell Count = {NumAlive()}\nUniverse Type = {bordertype}\nUniverse Size = {worldWidth} x {worldHeight}", 
+                    HUDFont, Brushes.Black, hud);
             }
 
             // Cleaning up pens and brushes
@@ -369,6 +460,95 @@ namespace GameOfLife
         private void openToolStripButton_Click(object sender, EventArgs e)
         {
             Open();
+        }
+
+        private void SettingButton_Click(object sender, EventArgs e)
+        {
+            Options options = new Options();
+            options.x = worldWidth;
+            options.y = worldHeight;
+            options.timer = genTimer;
+            options.seed = seed;
+            options.Cell = cellColor;
+            options.Background = backColor;
+            options.Grid = gridColor;
+            if (options.ShowDialog() == DialogResult.OK)
+            {
+                seed = options.seed;
+                worldWidth = options.x;
+                worldHeight = options.y;
+                genTimer = options.timer;
+                timer.Interval = genTimer;
+                cellColor = options.Cell;
+                gridColor = options.Grid;
+                backColor = options.Background;
+                graphicsPanel1.BackColor = backColor;
+
+                universe = new bool [worldWidth, worldHeight];
+                scratchpad = new bool [worldWidth, worldHeight];
+                NewWorld();
+            }
+        }
+
+        private void UniverseTypeButton_Click(object sender, EventArgs e)
+        {
+            universeType = !universeType;
+            graphicsPanel1.Invalidate();
+        }
+
+        private void gridToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            showGrid = !showGrid;
+            graphicsPanel1.Invalidate();
+        }
+
+        private void neighborCountToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            showNeighborCount = !showNeighborCount;
+            graphicsPanel1.Invalidate();
+        }
+
+        private void hUDToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            showHUD = !showHUD;
+            graphicsPanel1.Invalidate ();
+        }
+
+        private void Form1_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            Properties.Settings.Default.UniverseType = universeType;
+            Properties.Settings.Default.ShowGrid = showGrid;
+            Properties.Settings.Default.ShowNeighborCount = showNeighborCount;
+            Properties.Settings.Default.ShowHUD = showHUD;
+            Properties.Settings.Default.GenTimer = genTimer; 
+            Properties.Settings.Default.WorldWidth = worldWidth; 
+            Properties.Settings.Default.WorldHeight = worldHeight;
+            Properties.Settings.Default.GridColor = gridColor;
+            Properties.Settings.Default.CellColor = cellColor;
+            Properties.Settings.Default.BackgroundColor = backColor;
+
+            Properties.Settings.Default.Save();
+        }
+
+        private void resetSettingsToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            Properties.Settings.Default.Reset();
+
+            universeType = Properties.Settings.Default.UniverseType;
+            showGrid = Properties.Settings.Default.ShowGrid;
+            showNeighborCount = Properties.Settings.Default.ShowNeighborCount;
+            showHUD = Properties.Settings.Default.ShowHUD;
+            genTimer = Properties.Settings.Default.GenTimer;
+            worldWidth = Properties.Settings.Default.WorldWidth;
+            worldHeight = Properties.Settings.Default.WorldHeight;
+            gridColor = Properties.Settings.Default.GridColor;
+            cellColor = Properties.Settings.Default.CellColor;
+            backColor = Properties.Settings.Default.BackgroundColor;
+
+            graphicsPanel1.BackColor = backColor;
+            universe = new bool [worldWidth, worldHeight];
+            scratchpad = new bool [worldWidth, worldHeight];
+            graphicsPanel1.Invalidate();
         }
     }
 } 
